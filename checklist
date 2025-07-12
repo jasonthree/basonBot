@@ -1,0 +1,68 @@
+import discord
+from discord.ext import commands
+from discord.ui import View, Button, Select
+import json
+import os
+
+TOKEN = ""
+FILENAME = "checklist.json"
+
+# Load checklist from file
+def load_checklist():
+    if os.path.exists(FILENAME):
+        with open(FILENAME, "r") as f:
+            return json.load(f)
+    return []
+
+# Save checklist to file
+def save_checklist():
+    with open(FILENAME, "w") as f:
+        json.dump(checklist, f)
+
+checklist = load_checklist()
+
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+@bot.command()
+async def checklist_show(ctx):
+    if not checklist:
+        await ctx.send("Your checklist is empty.")
+        return
+    msg = "\n".join(
+        f"{i+1}. {'✅' if item['done'] else '❌'} {item['task']}"
+        for i, item in enumerate(checklist)
+    )
+    await ctx.send(f"**Your Checklist:**\n{msg}")
+
+@bot.command()
+async def checklist_add(ctx, *, task):
+    checklist.append({"task": task, "done": False})
+    save_checklist()
+    await ctx.send(f"Added task: `{task}`")
+
+@bot.command()
+async def checklist_done(ctx, task_num: int):
+    index = task_num - 1
+    if 0 <= index < len(checklist):
+        checklist[index]["done"] = not checklist[index]["done"]
+        save_checklist()
+        await ctx.send(f"Toggled status of task `{checklist[index]['task']}`")
+    else:
+        await ctx.send("Invalid task number.")
+
+@bot.command()
+async def checklist_remove(ctx, task_num: int):
+    index = task_num - 1
+    if 0 <= index < len(checklist):
+        removed = checklist.pop(index)
+        save_checklist()
+        await ctx.send(f"Removed task: `{removed['task']}`")
+    else:
+        await ctx.send("Invalid task number.")
+
+bot.run(TOKEN)
