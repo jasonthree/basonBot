@@ -180,10 +180,22 @@ class ToggleButton(Button):
         self.index = index
 
     async def callback(self, interaction: discord.Interaction):
-        task = data[self.user_id][self.index]
+        task_list = data[self.user_id]
+        task = task_list[self.index]
         task["done"] = not task["done"]
         save_data(data)
-        await interaction.response.send_message(f"Toggled `{task['task']}`", ephemeral=True)
+
+        # Regenerate view and checklist text
+        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+        task_list.sort(key=lambda x: (priority_order.get(x.get("priority"), 3), x.get("due", "9999-12-31 11:59 PM")))
+        view = TaskButtonsView(self.user_id, task_list)
+        task_text = "\n".join(
+            f"{i+1}. {'✅' if t.get('done') else '❌'} {t.get('task')} | {t.get('priority')} | {t.get('due', 'No due date')}"
+            for i, t in enumerate(task_list)
+        )
+
+        await interaction.response.edit_message(content=f"**Your Checklist:**\n{task_text}", view=view)
+
 
 class DeleteButton(Button):
     def __init__(self, user_id, index):
@@ -192,9 +204,32 @@ class DeleteButton(Button):
         self.index = index
 
     async def callback(self, interaction: discord.Interaction):
-        task = data[self.user_id].pop(self.index)
+        task_list = data.get(self.user_id, [])
+        if self.index >= len(task_list):
+            await interaction.response.send_message("❌ Task already deleted or index out of range.", ephemeral=True)
+            return
+
+        deleted_task = task_list.pop(self.index)
         save_data(data)
-        await interaction.response.send_message(f"Deleted `{task['task']}`", ephemeral=True)
+
+        if not task_list:
+            await interaction.response.edit_message(content="✅ All tasks completed or deleted.", view=None)
+            return
+
+        # Rebuild buttons and checklist view
+        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+        task_list.sort(key=lambda x: (priority_order.get(x.get("priority"), 3), x.get("due", "9999-12-31 11:59 PM")))
+        view = TaskButtonsView(self.user_id, task_list)
+        task_text = "\n".join(
+            f"{i+1}. {'✅' if t.get('done') else '❌'} {t.get('task')} | {t.get('priority')} | {t.get('due', 'No due date')}"
+            for i, t in enumerate(task_list)
+        )
+
+        await interaction.response.edit_message(
+            content=f"**Your Checklist:**\n{task_text}",
+            view=view
+        )
+
 
 @bot.event
 async def on_message(message):
